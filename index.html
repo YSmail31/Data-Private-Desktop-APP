@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Private — Téléchargement</title>
+  <meta name="description" content="Téléchargez l'application desktop Data Private pour Windows et Linux." />
+  <style>
+    :root {
+      --bg: #0b0d12;
+      --card: #151821;
+      --border: #232734;
+      --text: #e7e9ee;
+      --muted: #9aa1b0;
+      --accent: #5b8cff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: radial-gradient(1200px 600px at 50% -10%, #1a2030 0%, var(--bg) 60%);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .wrap { width: 100%; max-width: 720px; text-align: center; }
+    .logo {
+      width: 64px; height: 64px; margin: 0 auto 20px;
+      border-radius: 16px; background: var(--card);
+      border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 28px; font-weight: 700; color: var(--accent);
+    }
+    h1 { font-size: 32px; margin: 0 0 8px; letter-spacing: -0.02em; }
+    .tagline { color: var(--muted); margin: 0 0 4px; font-size: 16px; }
+    .version { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
+    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 24px; text-align: left;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .card.primary { outline: 2px solid var(--accent); }
+    .card h2 { margin: 0; font-size: 18px; display: flex; align-items: center; gap: 10px; }
+    .card .os-icon { font-size: 22px; }
+    .btn {
+      display: inline-block; text-decoration: none; text-align: center;
+      background: var(--accent); color: #fff; font-weight: 600;
+      padding: 11px 16px; border-radius: 10px; font-size: 14px;
+      transition: opacity .15s ease; border: none; cursor: pointer;
+    }
+    .btn:hover { opacity: .9; }
+    .btn.secondary { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn.disabled { background: var(--border); color: var(--muted); pointer-events: none; }
+    .links { display: flex; flex-direction: column; gap: 8px; }
+    .note { margin-top: 28px; color: var(--muted); font-size: 13px; }
+    .note a { color: var(--accent); }
+    .loading { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo">DP</div>
+    <h1>Data Private</h1>
+    <p class="tagline">Application desktop — masquez vos données personnelles avant de les envoyer à un LLM.</p>
+    <p class="version" id="version">Chargement de la dernière version…</p>
+
+    <div class="cards">
+      <div class="card" id="card-windows">
+        <h2><span class="os-icon">🪟</span> Windows</h2>
+        <div class="links" id="links-windows"><span class="loading">…</span></div>
+      </div>
+      <div class="card" id="card-linux">
+        <h2><span class="os-icon">🐧</span> Linux</h2>
+        <div class="links" id="links-linux"><span class="loading">…</span></div>
+      </div>
+    </div>
+
+    <p class="note">
+      Toutes les versions et notes de mise à jour sur la
+      <a id="releases-link" href="https://github.com/YSmail31/Data-Private-Desktop-APP/releases">page des releases GitHub</a>.
+    </p>
+  </div>
+
+  <script>
+    const REPO = "YSmail31/Data-Private-Desktop-APP";
+
+    function osIcon(name) { return name; }
+
+    function assetButton(asset, label, primary) {
+      const a = document.createElement("a");
+      a.className = "btn" + (primary ? "" : " secondary");
+      a.href = asset.browser_download_url;
+      a.textContent = label;
+      return a;
+    }
+
+    function pickAndRender(containerId, assets, matchers) {
+      const container = document.getElementById(containerId);
+      container.innerHTML = "";
+      let found = false;
+      matchers.forEach((m, i) => {
+        const asset = assets.find(a => m.test.test(a.name.toLowerCase()));
+        if (asset) {
+          found = true;
+          const sizeMb = (asset.size / (1024 * 1024)).toFixed(1);
+          container.appendChild(assetButton(asset, `${m.label} (${sizeMb} Mo)`, i === 0));
+        }
+      });
+      if (!found) {
+        const span = document.createElement("span");
+        span.className = "loading";
+        span.textContent = "Bientôt disponible";
+        container.appendChild(span);
+      }
+    }
+
+    function highlightCurrentOS() {
+      const p = (navigator.userAgent + " " + (navigator.platform || "")).toLowerCase();
+      let id = null;
+      if (p.includes("win")) id = "card-windows";
+      else if (p.includes("linux") && !p.includes("android")) id = "card-linux";
+      if (id) document.getElementById(id).classList.add("primary");
+    }
+
+    async function load() {
+      highlightCurrentOS();
+      try {
+        const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+          headers: { "Accept": "application/vnd.github+json" }
+        });
+        if (!res.ok) throw new Error("no release");
+        const rel = await res.json();
+        const assets = rel.assets || [];
+        document.getElementById("version").textContent =
+          "Dernière version : " + rel.tag_name;
+
+        pickAndRender("links-windows", assets, [
+          { label: "Installer .msi", test: /\.msi$/ },
+          { label: "Setup .exe", test: /-setup\.exe$/ },
+        ]);
+        pickAndRender("links-linux", assets, [
+          { label: "AppImage", test: /\.appimage$/ },
+          { label: "Paquet .deb", test: /\.deb$/ },
+          { label: "Paquet .rpm", test: /\.rpm$/ },
+        ]);
+      } catch (e) {
+        document.getElementById("version").textContent =
+          "Aucune version publiée pour l'instant.";
+        ["links-windows", "links-linux"].forEach(id => {
+          document.getElementById(id).innerHTML =
+            '<span class="loading">Bientôt disponible</span>';
+        });
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>
