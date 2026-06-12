@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Next.js build outputs
+.next/
+out/
+build/
+dist/
+
+# Tauri (Rust) build artifacts
+/src-tauri/target/
+/src-tauri/gen/
+
+# Environment files (jamais commiter)
+.env*
+
+# Logs
+*.log
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# System
+.DS_Store
+Thumbs.db
+
+# IDEs
+.idea/
+.vscode/

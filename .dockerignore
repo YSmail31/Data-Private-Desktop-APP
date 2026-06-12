@@ -1,0 +1,26 @@
+# Node / frontend
+**/node_modules
+**/.next
+**/out
+**/build
+**/__pycache__
+**/.venv
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Git
+.git/
+.gitignore
+
+# Docs & configs
+README.md
+Dockerfile
+docker-compose.yml
+
+gliner_lambda
+experimentation
+docling_lambda
+Desktop

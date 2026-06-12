@@ -1,0 +1,1 @@
+﻿components/dashboardv2/entity-detection-section.tsx(28,17): error TS2339: Property 'fetchStats' does not exist on type 'AppState'.
