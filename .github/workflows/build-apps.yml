@@ -1,12 +1,16 @@
-# Build des apps desktop/mobile Tauri (Data Private Desktop).
+# Build des apps desktop Tauri (Data Private Desktop).
 #
-# - Windows + Linux : entièrement automatiques (aucun secret requis).
-# - iOS : "prêt-pour-signature". Le job reste INERTE tant que la variable de repo
-#   `ENABLE_IOS` n'est pas mise à "true" (Settings > Secrets and variables >
-#   Actions > Variables). Il faut aussi fournir les secrets Apple listés plus bas.
+# Windows + Linux + macOS : entièrement automatiques (aucun secret requis).
+#   - Windows : .msi + .exe (NSIS)
+#   - Linux   : .deb + .AppImage + .rpm
+#   - macOS   : .dmg + .app (binaire universel Apple Silicon + Intel, NON signé)
+#
+# Note macOS : le .dmg n'est pas signé/notarisé (pas de compte Apple Developer
+# requis). À la première ouverture, l'utilisateur doit faire clic-droit > Ouvrir
+# (ou Réglages Système > Confidentialité et sécurité > "Ouvrir quand même").
 #
 # Déclenchement :
-#   - push d'un tag `v*` (ex: v0.1.0) -> build + Release GitHub (brouillon).
+#   - push d'un tag `v*` (ex: v0.1.0) -> build + Release GitHub publiée.
 #   - manuel via "Run workflow" (workflow_dispatch).
 #
 # Le projet Tauri est À LA RACINE de ce dépôt (npm) et `src-tauri/` (Rust).
@@ -20,15 +24,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      build_ios:
-        description: "Forcer le build iOS (nécessite les secrets Apple)"
-        type: boolean
-        default: false
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Windows (.msi + .exe NSIS) et Linux (.deb + .AppImage + .rpm)
+  # Windows (.msi + .exe NSIS), Linux (.deb + .AppImage + .rpm)
+  # et macOS (.dmg universel Apple Silicon + Intel).
   # ---------------------------------------------------------------------------
   desktop:
     permissions:
@@ -39,8 +39,13 @@ jobs:
         include:
           - platform: windows-latest
             args: ""
+            rust_targets: ""
           - platform: ubuntu-22.04
             args: ""
+            rust_targets: ""
+          - platform: macos-latest
+            args: "--target universal-apple-darwin"
+            rust_targets: "aarch64-apple-darwin,x86_64-apple-darwin"
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +75,8 @@ jobs:
 
       - name: Toolchain Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust_targets }}
 
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
@@ -90,75 +97,3 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-
-  # ---------------------------------------------------------------------------
-  # iOS — prêt-pour-signature. Reste désactivé tant que `ENABLE_IOS` != "true"
-  # (ou tant qu'on ne coche pas build_ios en lancement manuel).
-  #
-  # Secrets/variables à définir avant d'activer :
-  #   vars.ENABLE_IOS                = "true"
-  #   secrets.APPLE_CERTIFICATE      = certificat de distribution .p12 en base64
-  #   secrets.APPLE_CERTIFICATE_PASSWORD = mot de passe du .p12
-  #   secrets.APPLE_DEVELOPMENT_TEAM = Team ID Apple (ex: ABCDE12345)
-  #   secrets.IOS_PROVISIONING_PROFILE_BASE64 = profil de provisioning en base64
-  #   (export App Store) secrets.APPLE_API_KEY / APPLE_API_KEY_ID / APPLE_API_ISSUER
-  # ---------------------------------------------------------------------------
-  ios:
-    if: ${{ vars.ENABLE_IOS == 'true' || inputs.build_ios == true }}
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: package-lock.json
-
-      - name: Toolchain Rust + cibles iOS
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
-
-      - name: Cache Rust
-        uses: swatinem/rust-cache@v2
-        with:
-          workspaces: ./src-tauri -> target
-
-      - name: Install deps frontend
-        run: npm ci
-
-      - name: Import du certificat de signature Apple
-        uses: apple-actions/import-codesign-certs@v3
-        with:
-          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
-          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-
-      - name: Installer le profil de provisioning
-        run: |
-          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          echo "${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}" | base64 --decode \
-            > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
-
-      - name: Init projet iOS (génère le projet Xcode)
-        run: npx tauri ios init
-
-      - name: Build iOS (.ipa signé)
-        env:
-          APPLE_DEVELOPMENT_TEAM: ${{ secrets.APPLE_DEVELOPMENT_TEAM }}
-          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
-          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
-          APPLE_API_KEY_PATH: ${{ github.workspace }}/AuthKey.p8
-        run: |
-          if [ -n "${{ secrets.APPLE_API_KEY }}" ]; then
-            echo "${{ secrets.APPLE_API_KEY }}" | base64 --decode > "${APPLE_API_KEY_PATH}"
-          fi
-          npx tauri ios build --export-method app-store-connect
-
-      - name: Upload de l'IPA en artefact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ios-ipa
-          path: src-tauri/gen/apple/build/**/*.ipa
-          if-no-files-found: warn

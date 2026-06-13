@@ -37,8 +37,9 @@
     h1 { font-size: 32px; margin: 0 0 8px; letter-spacing: -0.02em; }
     .tagline { color: var(--muted); margin: 0 0 4px; font-size: 16px; }
     .version { color: var(--muted); font-size: 13px; margin-bottom: 32px; }
-    .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    @media (max-width: 560px) { .cards { grid-template-columns: 1fr; } }
+    .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    @media (max-width: 760px) { .cards { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 480px) { .cards { grid-template-columns: 1fr; } }
     .card {
       background: var(--card); border: 1px solid var(--border);
       border-radius: 14px; padding: 24px; text-align: left;
@@ -73,6 +74,10 @@
       <div class="card" id="card-windows">
         <h2><span class="os-icon">🪟</span> Windows</h2>
         <div class="links" id="links-windows"><span class="loading">…</span></div>
+      </div>
+      <div class="card" id="card-macos">
+        <h2><span class="os-icon">🍎</span> macOS</h2>
+        <div class="links" id="links-macos"><span class="loading">…</span></div>
       </div>
       <div class="card" id="card-linux">
         <h2><span class="os-icon">🐧</span> Linux</h2>
@@ -123,6 +128,7 @@
       const p = (navigator.userAgent + " " + (navigator.platform || "")).toLowerCase();
       let id = null;
       if (p.includes("win")) id = "card-windows";
+      else if (p.includes("mac")) id = "card-macos";
       else if (p.includes("linux") && !p.includes("android")) id = "card-linux";
       if (id) document.getElementById(id).classList.add("primary");
     }
@@ -143,6 +149,10 @@
           { label: "Installer .msi", test: /\.msi$/ },
           { label: "Setup .exe", test: /-setup\.exe$/ },
         ]);
+        pickAndRender("links-macos", assets, [
+          { label: "Image disque .dmg", test: /\.dmg$/ },
+          { label: "App (.app.tar.gz)", test: /\.app\.tar\.gz$/ },
+        ]);
         pickAndRender("links-linux", assets, [
           { label: "AppImage", test: /\.appimage$/ },
           { label: "Paquet .deb", test: /\.deb$/ },
@@ -151,7 +161,7 @@
       } catch (e) {
         document.getElementById("version").textContent =
           "Aucune version publiée pour l'instant.";
-        ["links-windows", "links-linux"].forEach(id => {
+        ["links-windows", "links-macos", "links-linux"].forEach(id => {
           document.getElementById(id).innerHTML =
             '<span class="loading">Bientôt disponible</span>';
         });
