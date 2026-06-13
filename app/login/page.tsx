@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { PageLoader } from "@/components/ui/page-loader"
 import { Eye, EyeOff, Mail, Lock, ArrowRight, Shield, Sparkles } from 'lucide-react'
 import Link from 'next/link'
-import api from '@/lib/api'
+import api, { API_BASE_URL } from '@/lib/api'
 import { isTauriRuntime } from '@/lib/platform'
 import { toast } from 'sonner'
 import Script from 'next/script'
@@ -23,7 +23,6 @@ function LoginContent() {
   const planParam = searchParams.get('plan')
   const cycleParam = searchParams.get('cycle') || 'monthly'
   const [isPageLoading, setIsPageLoading] = useState(false)
-  const version = process.env.NEXT_PUBLIC_REVISION || 'dev'
   const ref = useRef<HTMLDivElement | null>(null)
 
   const handleMouseMove = (
@@ -115,42 +114,6 @@ function LoginContent() {
     }
   };
 
-  const handleGoogleLogin = () => {
-    console.log("Tentative de connexion Google...");
-    if ((window as any).google) {
-      try {
-        // Optionnel: On peut aussi essayer de forcer l'affichage du One Tap
-        (window as any).google.accounts.id.prompt((notification: any) => {
-          if (notification.isNotDisplayed()) {
-            const reason = notification.getNotDisplayedReason();
-            console.warn("Le prompt Google n'a pas pu être affiché. Raison:", reason);
-
-            // Si le prompt automatique est bloqué, on peut utiliser le bouton de secours ou informer l'utilisateur
-            if (reason === 'opt_out_or_no_session') {
-              // C'est normal si l'utilisateur n'est pas connecté à Google ou a refusé le One Tap
-              // Dans ce cas, on devrait idéalement avoir un bouton de rendu Google standard
-              console.log("L'utilisateur n'est pas connecté ou a opt-out. Utilisation du bouton standard conseillée.");
-            }
-
-            if (reason === 'misconfigured_client') {
-              toast.error(lang === 'fr'
-                ? "Erreur 401: Client mal configuré. Vérifiez l'ID client et assurez-vous que l'origine (URL) est autorisée dans la console Google."
-                : "Error 401: Misconfigured client. Check Client ID and ensure the origin (URL) is authorized in Google Console.");
-            } else if (reason === 'suppressed_by_user') {
-              toast.error(lang === 'fr'
-                ? "Prompt Google bloqué. Veuillez vider les cookies de 'accounts.google.com' ou cliquer à nouveau."
-                : "Google prompt suppressed. Please clear 'accounts.google.com' cookies or click again.");
-            }
-          }
-        });
-      } catch (err) {
-        console.error("Erreur lors de l'appel à google.accounts.id.prompt:", err);
-      }
-    } else {
-      console.error("SDK Google non disponible lors du clic.");
-      toast.error(lang === 'fr' ? "Google n'est pas prêt. Réessayez dans un instant." : "Google is not ready. Try again in a moment.");
-    }
-  };
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -223,7 +186,7 @@ function LoginContent() {
       data.append('password', password)
 
       const response = await api.post(
-        '/auth/login',
+        `${API_BASE_URL}/auth/login`,
         data,
         {
           headers: {
@@ -233,6 +196,8 @@ function LoginContent() {
       )
 
       const { access_token, must_renew } = response.data
+
+      console.log(response.data)
       localStorage.setItem('token', access_token)
 
       // Async wakeup request
@@ -291,7 +256,6 @@ function LoginContent() {
               <span className="font-bold text-2xl text-secondary">
                 Data Private
               </span>
-              <span className="text-xs text-muted-foreground hidden group-hover:block">{version}</span>
               <span className="ml-auto text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full">Beta</span>
             </Link>
 

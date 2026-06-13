@@ -9,25 +9,7 @@ let apiUrl = '/api/v1'
 // on cible donc le backend distant. Détection au runtime => aucun impact sur le build web.
 const isTauri = typeof window !== 'undefined' &&
   ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
-
-if (isTauri) {
-  // App desktop : on cible le backend distant par défaut.
-  // Surchargeable via NEXT_PUBLIC_API_URL.
-  apiUrl = 'https://private-data.ai/api/v1';
-} else if (typeof window !== 'undefined') {
-  const hostname = window.location.hostname;
-  const protocol = window.location.protocol;
-  const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname);
-
-  if (hostname.includes('localhost') || isIpAddress) {
-    apiUrl = `${protocol}//${hostname}:8000/api/v1`;
-  } else if (process.env.NEXT_PUBLIC_API_URL) {
-    apiUrl = process.env.NEXT_PUBLIC_API_URL;
-  }
-} else if (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) {
-  apiUrl = process.env.NEXT_PUBLIC_API_URL;
-}
-
+apiUrl = 'https://private-data.ai/api/v1';
 
 const API_URL = apiUrl;
 

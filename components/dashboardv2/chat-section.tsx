@@ -14,7 +14,7 @@ import {
   User, Eye, EyeOff, Copy, RotateCcw, BrainCircuit,
   Square, Loader2, FileText, X, Paperclip, ChevronDown, Sparkles, Check, CheckCircle2,
   XCircle, FileIcon, Lock, Unlock, Menu, ChevronLeft, ChevronRight,
-  Brain, Zap
+  Brain, Zap, Sun, Moon, LogOut
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -62,6 +62,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Card } from "@/components/ui/card";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Popover,
   PopoverContent,
@@ -163,6 +164,19 @@ export function ChatSection() {
 
   const [piiOpen, setPiiOpen] = React.useState(false);
   const [piiSearch, setPiiSearch] = React.useState("");
+
+  // Thème clair/sombre + déconnexion (footer de la sidebar Historique)
+  const [isDark, setIsDark] = React.useState(false);
+  React.useEffect(() => {
+    setIsDark(document.documentElement.classList.contains("dark"));
+  }, []);
+  React.useEffect(() => {
+    document.documentElement.classList.toggle("dark", isDark);
+  }, [isDark]);
+  const handleLogout = () => {
+    localStorage.removeItem("token");
+    window.location.href = "/login";
+  };
 
   const [aiProviders, setAiProviders] = React.useState<AIProvider[]>(DEFAULT_AI_PROVIDERS);
   const [aiConfig, setAiConfig] = React.useState({ provider: "openrouter", model: "google/gemini-2.0-flash-lite:free", api_key: "" });
@@ -1540,6 +1554,61 @@ export function ChatSection() {
                   ))}
                 </div>
               </ScrollArea>
+
+              {/* Footer : thème clair/sombre + compte + déconnexion (comme la sidebar) */}
+              <div className="mt-auto border-t bg-background/20">
+                <div className="px-4 py-2">
+                  <div className="flex items-center bg-muted/50 rounded-xl p-1 shadow-inner border border-border/50">
+                    <button
+                      onClick={() => setIsDark(false)}
+                      className={cn(
+                        "flex-1 h-8 flex items-center justify-center text-[11px] rounded-lg transition-all duration-300",
+                        !isDark ? "bg-background shadow-sm font-bold text-primary" : "text-muted-foreground hover:bg-muted/80"
+                      )}
+                      title={t.sidebar.light}
+                    >
+                      <Sun className={cn("w-3.5 h-3.5", !isDark && "text-primary")} />
+                      <span className="ml-1.5 font-bold">{t.sidebar.light}</span>
+                    </button>
+                    <button
+                      onClick={() => setIsDark(true)}
+                      className={cn(
+                        "flex-1 h-8 flex items-center justify-center text-[11px] rounded-lg transition-all duration-300",
+                        isDark ? "bg-background shadow-sm font-bold text-primary" : "text-muted-foreground hover:bg-muted/80"
+                      )}
+                      title={t.sidebar.dark}
+                    >
+                      <Moon className={cn("w-3.5 h-3.5", isDark && "text-primary")} />
+                      <span className="ml-1.5 font-bold">{t.sidebar.dark}</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="p-2 pt-0 flex flex-col gap-2">
+                  <div
+                    className="flex flex-row items-center gap-2 cursor-pointer hover:bg-background p-2 rounded-xl"
+                    onClick={() => setActiveView("profile")}
+                  >
+                    <div className="relative group shrink-0">
+                      <Avatar className="h-10 w-10 hover:ring-2 ring-primary/20 transition-all border border-border/50 shadow-sm">
+                        <AvatarFallback className="bg-primary/10 text-primary text-sm font-bold uppercase">{getInitials(user?.full_name)}</AvatarFallback>
+                      </Avatar>
+                      <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-background" />
+                    </div>
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-bold text-foreground truncate">{user?.full_name}</span>
+                      <span className="text-[12px] text-muted-foreground truncate">{user?.email}</span>
+                    </div>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start gap-3 h-9 text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-all"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span className="text-xs font-bold">{lang === 'fr' ? 'Déconnexion' : 'Logout'}</span>
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
 

@@ -44,7 +44,7 @@ export function ApiDocsSection() {
 
   const handleCopyTestSnippet = () => {
     let snippet = '';
-    const endpoint = `${process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/public/extract`;
+    const endpoint = `${API_BASE_URL}/public/extract`;
     if (selectedTestLang === 'python') {
       snippet = `import requests
 
@@ -108,7 +108,7 @@ echo $res;`;
     try {
       const payloadObj = JSON.parse(testPayload);
       // We purposefully do not use our internal 'api' client because we want to test with the user's specific token
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1'}${endpoint}`, {
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -536,7 +536,7 @@ echo $res;`;
                                 {selectedTestLang === 'python' && (
                                   <>
                                     <span className="text-purple-400">import</span> requests<br /><br />
-                                    url = <span className="text-emerald-400">"{process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/public/extract"</span><br />
+                                    url = <span className="text-emerald-400">"{API_BASE_URL}/public/extract"</span><br />
                                     <div className="mt-1">
                                       <span>headers = {"{"}</span>
                                       <span className="text-emerald-400">"X-API-Key"</span>: <span className="text-emerald-400">"{selectedApiKey || 'YOUR_API_KEY'}"</span>
@@ -565,7 +565,7 @@ echo $res;`;
                                 )}
                                 {selectedTestLang === 'javascript' && (
                                   <>
-                                    <span className="text-purple-400">const</span> url = <span className="text-emerald-400">"{process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/public/extract"</span>;<br />
+                                    <span className="text-purple-400">const</span> url = <span className="text-emerald-400">"{API_BASE_URL}/public/extract"</span>;<br />
                                     <div className="mt-1">
                                       <span className="text-purple-400">const</span> headers = {"{"}<br />
                                       {"  "}<span className="text-emerald-400">"X-API-Key"</span>: <span className="text-emerald-400">"{selectedApiKey || 'YOUR_API_KEY'}"</span><br />
@@ -595,7 +595,7 @@ echo $res;`;
                                 {selectedTestLang === 'curl' && (
                                   <div className="flex flex-col gap-2">
                                     <div>
-                                      curl -X POST <span className="text-emerald-400">"{process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/public/extract"</span> \\
+                                      curl -X POST <span className="text-emerald-400">"{API_BASE_URL}/public/extract"</span> \\
                                     </div>
                                     <div>
                                       {"  "}-H <span className="text-emerald-400">"X-API-Key: {selectedApiKey || 'YOUR_API_KEY'}"</span> \\
@@ -617,7 +617,7 @@ echo $res;`;
                                 {selectedTestLang === 'php' && (
                                   <>
                                     <span className="text-purple-400">&lt;?php</span><br /><br />
-                                    $url = <span className="text-emerald-400">"{process.env.NEXT_PUBLIC_API_URL || '/api/v1'}/public/extract"</span>;<br />
+                                    $url = <span className="text-emerald-400">"{API_BASE_URL}/public/extract"</span>;<br />
                                     $headers = [<br />
                                     {"  "}<span className="text-emerald-400">"X-API-Key: {selectedApiKey || 'YOUR_API_KEY'}"</span><br />
                                     ];<br />
