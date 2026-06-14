@@ -108,6 +108,7 @@ pub fn local_model_status(app: AppHandle, repo: String) -> Result<ModelStatus, S
 pub async fn download_local_model(
     app: AppHandle,
     repo: String,
+    token: Option<String>,
     on_event: Channel<DownloadEvent>,
 ) -> Result<(), String> {
     let dir = model_dir(&app, &repo)?;
@@ -115,7 +116,7 @@ pub async fn download_local_model(
         .await
         .map_err(|e| format!("création du dossier modèle: {e}"))?;
 
-    if let Err(e) = download_all(&repo, &dir, &on_event).await {
+    if let Err(e) = download_all(&repo, &dir, token.as_deref(), &on_event).await {
         let _ = on_event.send(DownloadEvent::Error { message: e.clone() });
         return Err(e);
     }
@@ -126,6 +127,7 @@ pub async fn download_local_model(
 async fn download_all(
     repo: &str,
     dir: &Path,
+    token: Option<&str>,
     on_event: &Channel<DownloadEvent>,
 ) -> Result<(), String> {
     let client = reqwest::Client::builder()
@@ -137,8 +139,11 @@ async fn download_all(
     let mut sizes: Vec<u64> = Vec::with_capacity(REQUIRED_FILES.len());
     for file in REQUIRED_FILES {
         let url = hf_url(repo, file);
-        let len = client
-            .head(&url)
+        let mut req = client.head(&url);
+        if let Some(t) = token {
+            req = req.bearer_auth(t);
+        }
+        let len = req
             .send()
             .await
             .map_err(|e| format!("HEAD {file}: {e}"))?
@@ -155,8 +160,11 @@ async fn download_all(
     let mut downloaded: u64 = 0;
     for (idx, file) in REQUIRED_FILES.iter().enumerate() {
         let url = hf_url(repo, file);
-        let resp = client
-            .get(&url)
+        let mut req = client.get(&url);
+        if let Some(t) = token {
+            req = req.bearer_auth(t);
+        }
+        let resp = req
             .send()
             .await
             .map_err(|e| format!("GET {file}: {e}"))?

@@ -1,17 +1,18 @@
 import api from "@/lib/api"
 import { isTauriRuntime } from "@/lib/platform"
-import { LOCAL_MODELS, LOCAL_PROVIDER_ID } from "@/lib/local-models"
+import { getAllLocalModels, LOCAL_PROVIDER_ID } from "@/lib/local-models"
 
 // Provider "LOCAL" : modèles exécutés localement (Rust/candle), seulement en desktop.
-const LOCAL_PROVIDER: AIProvider = {
+// Construit dynamiquement (intégrés + ajoutés par l'utilisateur).
+const buildLocalProvider = (): AIProvider => ({
     id: LOCAL_PROVIDER_ID,
     name: "Local",
-    models: LOCAL_MODELS.map((m) => ({ id: m.id, name: m.name })),
-}
+    models: getAllLocalModels().map((m) => ({ id: m.id, name: m.name })),
+})
 
 // Ajoute le provider LOCAL en tête si on tourne dans l'app Tauri.
 const withLocal = (providers: AIProvider[]): AIProvider[] =>
-    isTauriRuntime() ? [LOCAL_PROVIDER, ...providers] : providers
+    isTauriRuntime() ? [buildLocalProvider(), ...providers] : providers
 
 export interface AIModel {
     id: string

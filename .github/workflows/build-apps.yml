@@ -107,6 +107,9 @@ jobs:
   # ---------------------------------------------------------------------------
   desktop-cuda:
     needs: desktop
+    # Non bloquant : une défaillance du build GPU ne doit jamais empêcher la
+    # publication des artefacts CPU/Metal (déjà créés par le job `desktop`).
+    continue-on-error: true
     permissions:
       contents: write
     strategy:
@@ -114,8 +117,17 @@ jobs:
       matrix:
         platform: [windows-latest, ubuntu-22.04]
     runs-on: ${{ matrix.platform }}
+    # Les runners CI n'ont pas de GPU : on fixe la compute capability cible
+    # (sinon bindgen_cuda/candle-kernels tente de détecter le GPU et échoue).
+    # 7.5 (Turing) => PTX compatible en avant avec Ampere/Ada via JIT.
+    env:
+      CUDA_COMPUTE_CAP: "75"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Environnement MSVC (cl.exe pour nvcc)
+        if: matrix.platform == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Dépendances système Linux (WebKitGTK, etc.)
         if: matrix.platform == 'ubuntu-22.04'

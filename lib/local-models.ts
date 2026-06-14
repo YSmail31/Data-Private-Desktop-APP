@@ -23,13 +23,47 @@ export const LOCAL_MODELS: LocalModelDef[] = [
   },
 ]
 
+// ---------------------------------------------------------------------------
+// Modèles ajoutés par l'utilisateur (nom de repo HF saisi dans la modale).
+// Persistés en localStorage pour réapparaître au prochain lancement.
+// ---------------------------------------------------------------------------
+const CUSTOM_KEY = "local_models_custom"
+
+export function getCustomLocalModels(): LocalModelDef[] {
+  if (typeof window === "undefined") return []
+  try {
+    const raw = localStorage.getItem(CUSTOM_KEY)
+    const arr = raw ? JSON.parse(raw) : []
+    return Array.isArray(arr) ? arr : []
+  } catch {
+    return []
+  }
+}
+
+export function addCustomLocalModel(repo: string): LocalModelDef {
+  const name = repo.split("/").pop() || repo
+  const def: LocalModelDef = { id: repo, name, repo }
+  const current = getCustomLocalModels()
+  const exists = current.some((m) => m.id === repo) || LOCAL_MODELS.some((m) => m.id === repo)
+  if (!exists && typeof window !== "undefined") {
+    localStorage.setItem(CUSTOM_KEY, JSON.stringify([...current, def]))
+  }
+  return def
+}
+
+// Modèles intégrés + personnalisés (dédupliqués).
+export function getAllLocalModels(): LocalModelDef[] {
+  const custom = getCustomLocalModels().filter((c) => !LOCAL_MODELS.some((b) => b.id === c.id))
+  return [...LOCAL_MODELS, ...custom]
+}
+
 export function isLocalModel(modelId: string | undefined | null): boolean {
   if (!modelId) return false
-  return LOCAL_MODELS.some((m) => m.id === modelId)
+  return getAllLocalModels().some((m) => m.id === modelId)
 }
 
 export function getLocalRepo(modelId: string): string | undefined {
-  return LOCAL_MODELS.find((m) => m.id === modelId)?.repo
+  return getAllLocalModels().find((m) => m.id === modelId)?.repo
 }
 
 // ---------------------------------------------------------------------------
@@ -57,6 +91,7 @@ type DownloadEvent =
 export async function downloadLocalModel(
   repo: string,
   onProgress: (percent: number) => void,
+  token?: string,
 ): Promise<void> {
   const channel = new Channel<DownloadEvent>()
   return new Promise<void>((resolve, reject) => {
@@ -65,7 +100,7 @@ export async function downloadLocalModel(
       else if (msg.type === "done") resolve()
       else if (msg.type === "error") reject(new Error(msg.message))
     }
-    invoke("download_local_model", { repo, onEvent: channel }).catch(reject)
+    invoke("download_local_model", { repo, token: token || null, onEvent: channel }).catch(reject)
   })
 }
 

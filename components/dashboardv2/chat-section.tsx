@@ -72,7 +72,8 @@ import {
 import { fetchAIProviders, DEFAULT_AI_PROVIDERS, AIProvider, getModelSupportsReasoning } from "@/lib/ai-config";
 import { getInitials, labels_dict, translations } from "@/lib/translations";
 import {
-  LOCAL_PROVIDER_ID, LOCAL_MODELS, isLocalModel, getLocalRepo,
+  LOCAL_PROVIDER_ID, isLocalModel, getLocalRepo,
+  getAllLocalModels, addCustomLocalModel,
   localModelStatus, downloadLocalModel, runLocalModel,
 } from "@/lib/local-models";
 
@@ -190,9 +191,14 @@ export function ChatSection() {
   type LocalState = { state: "unknown" | "idle" | "downloading" | "ready"; percent: number };
   const [localStatus, setLocalStatus] = React.useState<Record<string, LocalState>>({});
 
+  // Modale d'ajout d'un modèle HuggingFace personnalisé.
+  const [addLocalOpen, setAddLocalOpen] = React.useState(false);
+  const [newRepo, setNewRepo] = React.useState("");
+  const [newHfKey, setNewHfKey] = React.useState("");
+
   // Au montage (desktop uniquement) : vérifie quels modèles locaux sont déjà téléchargés.
   React.useEffect(() => {
-    LOCAL_MODELS.forEach(async (m) => {
+    getAllLocalModels().forEach(async (m) => {
       try {
         const st = await localModelStatus(m.repo);
         setLocalStatus((s) => ({ ...s, [m.id]: { state: st.ready ? "ready" : "idle", percent: st.ready ? 100 : 0 } }));
@@ -202,20 +208,45 @@ export function ChatSection() {
     });
   }, []);
 
-  const handleDownloadLocal = async (modelId: string) => {
+  const handleDownloadLocal = async (modelId: string, token?: string) => {
     const repo = getLocalRepo(modelId);
     if (!repo) return;
     setLocalStatus((s) => ({ ...s, [modelId]: { state: "downloading", percent: 0 } }));
     try {
       await downloadLocalModel(repo, (percent) => {
         setLocalStatus((s) => ({ ...s, [modelId]: { state: "downloading", percent } }));
-      });
+      }, token);
       setLocalStatus((s) => ({ ...s, [modelId]: { state: "ready", percent: 100 } }));
       toast.success(lang === "fr" ? "Modèle téléchargé" : "Model downloaded");
     } catch (e: any) {
       setLocalStatus((s) => ({ ...s, [modelId]: { state: "idle", percent: 0 } }));
       toast.error(e?.message || (lang === "fr" ? "Échec du téléchargement" : "Download failed"));
     }
+  };
+
+  // Ajoute un modèle HF saisi dans la modale, l'insère dans le picker et lance le download.
+  const handleAddLocalModel = async () => {
+    const repo = newRepo.trim();
+    if (!repo.includes("/")) {
+      toast.error(lang === "fr" ? "Format attendu : organisation/modele" : "Expected format: org/model");
+      return;
+    }
+    const def = addCustomLocalModel(repo);
+    // Insère le modèle dans le provider LOCAL du picker (immédiatement visible).
+    setAiProviders((prev) => {
+      const hasLocal = prev.some((p) => p.id === LOCAL_PROVIDER_ID);
+      if (hasLocal) {
+        return prev.map((p) => p.id === LOCAL_PROVIDER_ID
+          ? { ...p, models: [...p.models.filter((m) => m.id !== def.id), { id: def.id, name: def.name }] }
+          : p);
+      }
+      return [{ id: LOCAL_PROVIDER_ID, name: "Local", models: [{ id: def.id, name: def.name }] }, ...prev];
+    });
+    const token = newHfKey.trim();
+    setAddLocalOpen(false);
+    setNewRepo("");
+    setNewHfKey("");
+    await handleDownloadLocal(def.id, token || undefined);
   };
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
@@ -2372,7 +2403,17 @@ export function ChatSection() {
                                           </MenubarSubTrigger>
                                           <MenubarPortal>
                                             <MenubarSubContent className="w-72 p-2 rounded-2xl shadow-2xl border-border/50 animate-in slide-in-from-left-1 duration-200">
-                                              {/* <MenubarLabel className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-foreground/40 mb-1">{category}</MenubarLabel> */}
+                                              {/* Bouton d'ajout d'un modèle HF, en haut de la pile LOCAL. */}
+                                              {category === "Local" && (
+                                                <MenubarItem
+                                                  onSelect={(e) => e.preventDefault()}
+                                                  onClick={() => setAddLocalOpen(true)}
+                                                  className="flex items-center gap-2 rounded-xl px-3 py-2 cursor-pointer transition-colors mx-1 mb-1 text-primary border border-dashed border-primary/30 hover:bg-primary/5"
+                                                >
+                                                  <Plus size={14} />
+                                                  <span className="text-[11px] font-bold">{lang === 'fr' ? "Ajouter un modèle" : "Add a model"}</span>
+                                                </MenubarItem>
+                                              )}
                                               {models.map(model => {
                                                 const isLocal = (model as any).providerId === LOCAL_PROVIDER_ID;
                                                 const lst = isLocal ? (localStatus[model.id] || { state: "unknown", percent: 0 }) : null;
@@ -2414,17 +2455,7 @@ export function ChatSection() {
                                                     <div className="flex items-center gap-1.5">
                                                       {isLocal ? (
                                                         lst?.state === "downloading" ? (
-                                                          <span className="flex items-center gap-1 text-primary">
-                                                            <span className="relative inline-flex h-4 w-4 items-center justify-center">
-                                                              <svg className="h-4 w-4 -rotate-90" viewBox="0 0 20 20">
-                                                                <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="3" className="text-muted-foreground/20" />
-                                                                <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
-                                                                  strokeDasharray={2 * Math.PI * 8}
-                                                                  strokeDashoffset={2 * Math.PI * 8 * (1 - (lst.percent || 0) / 100)} />
-                                                              </svg>
-                                                            </span>
-                                                            <span className="text-[9px] font-bold tabular-nums">{Math.round(lst.percent)}%</span>
-                                                          </span>
+                                                          <Loader2 size={14} className="text-primary animate-spin" />
                                                         ) : lst?.state === "ready" ? (
                                                           <Check size={14} className="text-emerald-500" />
                                                         ) : (
@@ -2563,6 +2594,56 @@ export function ChatSection() {
         </div>
       )}
 
+      {/* Modale : ajouter un modèle local HuggingFace */}
+      <Dialog open={addLocalOpen} onOpenChange={setAddLocalOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Download className="h-4 w-4 text-primary" />
+              {lang === 'fr' ? "Ajouter un modèle local" : "Add a local model"}
+            </DialogTitle>
+            <DialogDescription>
+              {lang === 'fr'
+                ? "Saisis le nom du dépôt HuggingFace. La clé API n'est requise que pour les modèles privés ou à accès restreint."
+                : "Enter the HuggingFace repo name. The API key is only needed for private or gated models."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">{lang === 'fr' ? "Modèle HuggingFace" : "HuggingFace model"}</Label>
+              <Input
+                placeholder="ex: unsloth/Qwen2-0.5B-Instruct"
+                value={newRepo}
+                onChange={(e) => setNewRepo(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddLocalModel(); }}
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">
+                {lang === 'fr' ? "Clé API HuggingFace" : "HuggingFace API key"}
+                <span className="ml-1 font-normal text-muted-foreground">{lang === 'fr' ? "(optionnelle)" : "(optional)"}</span>
+              </Label>
+              <Input
+                type="password"
+                placeholder="hf_..."
+                value={newHfKey}
+                onChange={(e) => setNewHfKey(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleAddLocalModel(); }}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setAddLocalOpen(false)}>
+              {lang === 'fr' ? "Annuler" : "Cancel"}
+            </Button>
+            <Button onClick={handleAddLocalModel} disabled={!newRepo.trim().includes('/')}>
+              <Download className="h-4 w-4 mr-1.5" />
+              {lang === 'fr' ? "Télécharger" : "Download"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={isAiConfigModalOpen}
