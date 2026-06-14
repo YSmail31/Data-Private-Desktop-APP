@@ -120,8 +120,13 @@ jobs:
     # Les runners CI n'ont pas de GPU : on fixe la compute capability cible
     # (sinon bindgen_cuda/candle-kernels tente de détecter le GPU et échoue).
     # 7.5 (Turing) => PTX compatible en avant avec Ampere/Ada via JIT.
+    #
+    # NVCC_PREPEND_FLAGS : nvcc (CUDA 12.5) refuse les versions récentes de MSVC
+    # présentes sur windows-latest. `-allow-unsupported-compiler` lève ce blocage
+    # (no-op sur Linux où gcc est supporté).
     env:
       CUDA_COMPUTE_CAP: "75"
+      NVCC_PREPEND_FLAGS: "-allow-unsupported-compiler"
     steps:
       - uses: actions/checkout@v4
 
