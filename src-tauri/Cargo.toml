@@ -23,3 +23,38 @@ serde = { version = "1.0", features = ["derive"] }
 log = "0.4"
 tauri = { version = "2.11.2", features = [] }
 tauri-plugin-log = "2"
+
+# Inférence locale (HuggingFace en pur Rust)
+candle-core = "0.8.4"
+candle-nn = "0.8.4"
+candle-transformers = "0.8.4"
+tokenizers = "0.20"
+
+# Téléchargement des poids depuis HuggingFace (streaming + progression)
+reqwest = { version = "0.12", default-features = false, features = ["stream", "rustls-tls"] }
+futures-util = "0.3"
+tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "fs", "io-util"] }
+
+# GPU Apple (Metal) : activé automatiquement sur macOS, aucun toolkit requis.
+[target.'cfg(target_os = "macos")'.dependencies]
+candle-core = { version = "0.8.4", features = ["metal"] }
+candle-nn = { version = "0.8.4", features = ["metal"] }
+candle-transformers = { version = "0.8.4", features = ["metal"] }
+
+[features]
+default = []
+# GPU NVIDIA : opt-in (build avec `--features cuda`, requiert le toolkit CUDA).
+cuda = ["candle-core/cuda", "candle-nn/cuda", "candle-transformers/cuda"]
+
+# Optimise TOUTES les dépendances (candle, gemm, tokenizers...) même en build
+# debug (`tauri dev`). Sans ça, l'inférence CPU est ~10-30x plus lente car les
+# matmuls ne sont ni vectorisées (SIMD) ni inlinées. Le crate `app` lui-même
+# reste en debug (compilation rapide, debuggable).
+[profile.dev.package."*"]
+opt-level = 3
+
+# Build de release (tauri build) : binaire plus rapide et plus compact.
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

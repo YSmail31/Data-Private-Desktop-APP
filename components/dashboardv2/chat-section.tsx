@@ -14,7 +14,7 @@ import {
   User, Eye, EyeOff, Copy, RotateCcw, BrainCircuit,
   Square, Loader2, FileText, X, Paperclip, ChevronDown, Sparkles, Check, CheckCircle2,
   XCircle, FileIcon, Lock, Unlock, Menu, ChevronLeft, ChevronRight,
-  Brain, Zap, Sun, Moon, LogOut
+  Brain, Zap, Sun, Moon, LogOut, Download
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -71,6 +71,10 @@ import {
 } from "@/components/ui/popover";
 import { fetchAIProviders, DEFAULT_AI_PROVIDERS, AIProvider, getModelSupportsReasoning } from "@/lib/ai-config";
 import { getInitials, labels_dict, translations } from "@/lib/translations";
+import {
+  LOCAL_PROVIDER_ID, LOCAL_MODELS, isLocalModel, getLocalRepo,
+  localModelStatus, downloadLocalModel, runLocalModel,
+} from "@/lib/local-models";
 
 interface PII {
   id: string;
@@ -181,6 +185,38 @@ export function ChatSection() {
   const [aiProviders, setAiProviders] = React.useState<AIProvider[]>(DEFAULT_AI_PROVIDERS);
   const [aiConfig, setAiConfig] = React.useState({ provider: "openrouter", model: "google/gemini-2.0-flash-lite:free", api_key: "" });
   const [savedCredentials, setSavedCredentials] = React.useState<Record<string, string>>({});
+
+  // État des modèles locaux (téléchargés via Rust/candle). Clé = id du modèle.
+  type LocalState = { state: "unknown" | "idle" | "downloading" | "ready"; percent: number };
+  const [localStatus, setLocalStatus] = React.useState<Record<string, LocalState>>({});
+
+  // Au montage (desktop uniquement) : vérifie quels modèles locaux sont déjà téléchargés.
+  React.useEffect(() => {
+    LOCAL_MODELS.forEach(async (m) => {
+      try {
+        const st = await localModelStatus(m.repo);
+        setLocalStatus((s) => ({ ...s, [m.id]: { state: st.ready ? "ready" : "idle", percent: st.ready ? 100 : 0 } }));
+      } catch {
+        setLocalStatus((s) => ({ ...s, [m.id]: { state: "idle", percent: 0 } }));
+      }
+    });
+  }, []);
+
+  const handleDownloadLocal = async (modelId: string) => {
+    const repo = getLocalRepo(modelId);
+    if (!repo) return;
+    setLocalStatus((s) => ({ ...s, [modelId]: { state: "downloading", percent: 0 } }));
+    try {
+      await downloadLocalModel(repo, (percent) => {
+        setLocalStatus((s) => ({ ...s, [modelId]: { state: "downloading", percent } }));
+      });
+      setLocalStatus((s) => ({ ...s, [modelId]: { state: "ready", percent: 100 } }));
+      toast.success(lang === "fr" ? "Modèle téléchargé" : "Model downloaded");
+    } catch (e: any) {
+      setLocalStatus((s) => ({ ...s, [modelId]: { state: "idle", percent: 0 } }));
+      toast.error(e?.message || (lang === "fr" ? "Échec du téléchargement" : "Download failed"));
+    }
+  };
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -757,7 +793,68 @@ export function ChatSection() {
     }
   };
 
+  // Envoi via un modèle LOCAL : aucune anonymisation, aucun appel serveur.
+  // Les tokens sont générés en Rust (candle) et streamés directement.
+  const handleLocalSend = async () => {
+    const modelId = activeModeModelId || aiConfig.model;
+    const repo = getLocalRepo(modelId);
+    if (!repo || !input.trim()) return;
+
+    const st = localStatus[modelId];
+    if (st?.state !== "ready") {
+      toast.error(lang === "fr" ? "Téléchargez d'abord le modèle" : "Download the model first");
+      return;
+    }
+
+    const userText = input;
+    const userMsg: Message = {
+      id: "temp-" + Date.now().toString(),
+      role: "user",
+      content: userText,
+      timestamp: new Date(),
+      piis: [],
+      showPiiValues: true,
+      raw_content: userText,
+    };
+    setMessages(prev => [...prev, userMsg]);
+    setInput("");
+    setIsAnonymized(false);
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+
+    setIsStreaming(true);
+    setIsLoading(true);
+    const assistantMsgId = "assistant-" + Date.now().toString();
+    setMessages(prev => [...prev, {
+      id: assistantMsgId,
+      role: "assistant",
+      content: "",
+      timestamp: new Date(),
+      piis: [],
+      showPiiValues: false,
+      isLoading: true,
+    } as any]);
+
+    let acc = "";
+    try {
+      await runLocalModel(repo, userText, (token) => {
+        setIsLoading(false);
+        acc += token;
+        setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: acc, isLoading: false } : m));
+      });
+    } catch (e: any) {
+      toast.error(e?.message || (lang === "fr" ? "Erreur du modèle local" : "Local model error"));
+      setMessages(prev => prev.map(m => m.id === assistantMsgId ? { ...m, content: acc, isLoading: false } : m));
+    } finally {
+      setIsStreaming(false);
+      setIsLoading(false);
+    }
+  };
+
   const handleSend = async () => {
+    // Modèle local : pipeline dédié (pas d'anonymisation, pas de backend).
+    if (isLocalModel(activeModeModelId || aiConfig.model)) {
+      return handleLocalSend();
+    }
     setIsStreaming(true);
     if (!user?.openrouter_api_key && !aiConfig.api_key && aiConfig.provider !== 'google-free') {
       toast.error(lang === 'fr' ? "Veuillez configurer votre clé API" : "Please configure your API key");
@@ -2276,14 +2373,31 @@ export function ChatSection() {
                                           <MenubarPortal>
                                             <MenubarSubContent className="w-72 p-2 rounded-2xl shadow-2xl border-border/50 animate-in slide-in-from-left-1 duration-200">
                                               {/* <MenubarLabel className="px-3 py-1 text-[10px] font-black uppercase tracking-widest text-foreground/40 mb-1">{category}</MenubarLabel> */}
-                                              {models.map(model => (
+                                              {models.map(model => {
+                                                const isLocal = (model as any).providerId === LOCAL_PROVIDER_ID;
+                                                const lst = isLocal ? (localStatus[model.id] || { state: "unknown", percent: 0 }) : null;
+                                                const localReady = !isLocal || lst?.state === "ready";
+                                                return (
                                                 <MenubarItem
                                                   key={model.id}
+                                                  onSelect={(e) => { if (isLocal && !localReady) e.preventDefault(); }}
                                                   className={cn(
                                                     "flex items-center justify-between rounded-xl px-3 py-2 cursor-pointer transition-colors mx-1 mb-0.5",
                                                     aiConfig.model === model.id ? "bg-primary/5 text-primary border border-primary/20" : "hover:bg-muted/40"
                                                   )}
                                                   onClick={async () => {
+                                                    if (isLocal) {
+                                                      // Pas encore prêt : un clic lance (ou ignore si déjà en cours) le téléchargement.
+                                                      if (!localReady) {
+                                                        if (lst?.state !== "downloading") handleDownloadLocal(model.id);
+                                                        return;
+                                                      }
+                                                      // Modèle local prêt : sélection sans appel backend.
+                                                      setAiConfig({ ...aiConfig, model: model.id, provider: LOCAL_PROVIDER_ID, api_key: "" });
+                                                      setActiveModeModelId(model.id);
+                                                      toast.success(lang === 'fr' ? `Modèle local : ${model.name}` : `Local model: ${model.name}`);
+                                                      return;
+                                                    }
                                                     const newConfig = { ...aiConfig, model: model.id, provider: "openrouter", api_key: "" };
                                                     setAiConfig(newConfig);
                                                     try {
@@ -2296,16 +2410,39 @@ export function ChatSection() {
                                                   }}
                                                 >
                                                   <div className="flex gap-2 items-center justify-between w-full">
-                                                    <span className="text-[11px] font-bold">{model.id}</span>
+                                                    <span className="text-[11px] font-bold">{isLocal ? model.name : model.id}</span>
                                                     <div className="flex items-center gap-1.5">
-                                                      <MessageSquare size={12} />
-                                                      {((model as any).options?.think || (model as any).supportsReasoning) && <Brain size={12} />}
-                                                      {(model as any).options?.research && <Search size={12} />}
-                                                      {(model as any).options?.pro && <Zap size={12} />}
+                                                      {isLocal ? (
+                                                        lst?.state === "downloading" ? (
+                                                          <span className="flex items-center gap-1 text-primary">
+                                                            <span className="relative inline-flex h-4 w-4 items-center justify-center">
+                                                              <svg className="h-4 w-4 -rotate-90" viewBox="0 0 20 20">
+                                                                <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="3" className="text-muted-foreground/20" />
+                                                                <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+                                                                  strokeDasharray={2 * Math.PI * 8}
+                                                                  strokeDashoffset={2 * Math.PI * 8 * (1 - (lst.percent || 0) / 100)} />
+                                                              </svg>
+                                                            </span>
+                                                            <span className="text-[9px] font-bold tabular-nums">{Math.round(lst.percent)}%</span>
+                                                          </span>
+                                                        ) : lst?.state === "ready" ? (
+                                                          <Check size={14} className="text-emerald-500" />
+                                                        ) : (
+                                                          <Download size={14} className="text-primary" />
+                                                        )
+                                                      ) : (
+                                                        <>
+                                                          <MessageSquare size={12} />
+                                                          {((model as any).options?.think || (model as any).supportsReasoning) && <Brain size={12} />}
+                                                          {(model as any).options?.research && <Search size={12} />}
+                                                          {(model as any).options?.pro && <Zap size={12} />}
+                                                        </>
+                                                      )}
                                                     </div>
                                                   </div>
                                                 </MenubarItem>
-                                              ))}
+                                                );
+                                              })}
                                             </MenubarSubContent>
                                           </MenubarPortal>
                                         </MenubarSub>

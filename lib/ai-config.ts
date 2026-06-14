@@ -1,4 +1,17 @@
 import api from "@/lib/api"
+import { isTauriRuntime } from "@/lib/platform"
+import { LOCAL_MODELS, LOCAL_PROVIDER_ID } from "@/lib/local-models"
+
+// Provider "LOCAL" : modèles exécutés localement (Rust/candle), seulement en desktop.
+const LOCAL_PROVIDER: AIProvider = {
+    id: LOCAL_PROVIDER_ID,
+    name: "Local",
+    models: LOCAL_MODELS.map((m) => ({ id: m.id, name: m.name })),
+}
+
+// Ajoute le provider LOCAL en tête si on tourne dans l'app Tauri.
+const withLocal = (providers: AIProvider[]): AIProvider[] =>
+    isTauriRuntime() ? [LOCAL_PROVIDER, ...providers] : providers
 
 export interface AIModel {
     id: string
@@ -46,7 +59,7 @@ export const fetchAIProviders = async (): Promise<AIProvider[]> => {
         const data = response.data
         if (!data || !Array.isArray(data)) {
             // fallback if backend didn't return an array
-            return Array.isArray(data) ? data as AIProvider[] : DEFAULT_AI_PROVIDERS
+            return withLocal(Array.isArray(data) ? data as AIProvider[] : DEFAULT_AI_PROVIDERS)
         }
 
         const providersMap: Record<string, AIProvider> = {
@@ -83,10 +96,10 @@ export const fetchAIProviders = async (): Promise<AIProvider[]> => {
             }
         }
 
-        return Object.values(providersMap).filter(p => p.models.length > 0)
+        return withLocal(Object.values(providersMap).filter(p => p.models.length > 0))
     } catch (error) {
         console.error("Failed to fetch AI providers", error)
-        return DEFAULT_AI_PROVIDERS
+        return withLocal(DEFAULT_AI_PROVIDERS)
     }
 }
 
